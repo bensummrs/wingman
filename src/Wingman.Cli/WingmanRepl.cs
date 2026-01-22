@@ -1,3 +1,4 @@
+using Spectre.Console;
 using Wingman.Agent;
 using Wingman.Agent.Configuration;
 
@@ -19,11 +20,12 @@ public sealed class WingmanRepl
 
     public async Task<int> RunAsync()
     {
-        Console.WriteLine("Wingman CLI (interactive). Type /help for commands.");
+        ShowWelcomeBanner();
 
         while (true)
         {
-            Console.Write($"wingman ({workingDirectory})> ");
+            var shortPath = GetShortPath(workingDirectory);
+            AnsiConsole.Markup($"[bold cyan]wingman[/] [dim]{shortPath}[/] [bold green]❯[/] ");
             var input = Console.ReadLine()?.Trim() ?? string.Empty;
 
             if (input.Length == 0)
@@ -34,7 +36,10 @@ public sealed class WingmanRepl
                 var parsed = ReplCommands.Parse(input);
                 var handled = ReplCommands.TryHandle(parsed, config, history, ref agent, ref workingDirectory);
                 if (handled.ShouldExit)
+                {
+                    AnsiConsole.MarkupLine("[dim]Goodbye! 👋[/]");
                     return 0;
+                }
                 continue;
             }
 
@@ -42,17 +47,17 @@ public sealed class WingmanRepl
 
             try
             {
-                Console.WriteLine();
+                AnsiConsole.WriteLine();
                 var fullResponse = new System.Text.StringBuilder();
 
                 await agent.RunStreamingWithToolsAsync(composedPrompt, workingDirectory, onTextUpdate: text =>
                 {
-                    Console.Write(text);
+                    AnsiConsole.Markup($"[grey]{Markup.Escape(text)}[/]");
                     fullResponse.Append(text);
                 });
 
-                Console.WriteLine();
-                Console.WriteLine();
+                AnsiConsole.WriteLine();
+                AnsiConsole.WriteLine();
 
                 var text = fullResponse.ToString();
                 if (string.IsNullOrWhiteSpace(text))
@@ -63,13 +68,49 @@ public sealed class WingmanRepl
             }
             catch (Exception ex)
             {
-                Console.WriteLine();
-                Console.WriteLine($"Error: {ex.Message}");
-                Console.WriteLine();
+                AnsiConsole.WriteLine();
+                AnsiConsole.MarkupLine($"[red bold]✗[/] [red]Error:[/] {Markup.Escape(ex.Message)}");
+                if (ex.InnerException != null)
+                {
+                    AnsiConsole.MarkupLine($"[dim]{Markup.Escape(ex.InnerException.Message)}[/]");
+                }
+                AnsiConsole.WriteLine();
             }
         }
+    }
 
-        return 0;
+    private void ShowWelcomeBanner()
+    {
+        var panel = new Panel(new Markup(
+            "[bold cyan]Wingman AI Assistant[/]\n" +
+            $"[dim]Model:[/] [yellow]{config.Model}[/]\n" +
+            "[dim]Type [cyan]/help[/] for commands[/]"))
+        {
+            Border = BoxBorder.Rounded,
+            BorderStyle = new Style(foreground: Color.Cyan),
+            Padding = new Padding(1, 0)
+        };
+
+        AnsiConsole.Write(panel);
+        AnsiConsole.WriteLine();
+    }
+
+    private static string GetShortPath(string path)
+    {
+        try
+        {
+            var currentDir = new DirectoryInfo(path);
+            var parentName = currentDir.Parent?.Name;
+            
+            if (parentName != null)
+                return $"{parentName}/{currentDir.Name}";
+            
+            return currentDir.Name;
+        }
+        catch
+        {
+            return path;
+        }
     }
 }
 

@@ -1,3 +1,4 @@
+using Spectre.Console;
 using Wingman.Agent.Configuration;
 using Wingman.Cli;
 
@@ -5,7 +6,7 @@ using Wingman.Cli;
 var load = WingmanCliConfigLoader.TryLoad();
 if (!string.IsNullOrEmpty(load.ErrorMessage))
 {
-    Console.Error.WriteLine(load.ErrorMessage);
+    AnsiConsole.MarkupLine($"[red bold]✗ Configuration Error[/]\n[red]{Markup.Escape(load.ErrorMessage)}[/]");
     return 1;
 }
 

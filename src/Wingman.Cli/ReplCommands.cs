@@ -1,3 +1,4 @@
+using Spectre.Console;
 using Wingman.Agent;
 using Wingman.Agent.Configuration;
 
@@ -7,18 +8,23 @@ public static class ReplCommands
 {
     public static void PrintHelp()
     {
-        Console.WriteLine("""
-Commands:
-  /help                 Show this help
-  /exit, /quit           Exit
-  /cwd                  Show current working directory used for tools
-  /cd <path>             Change working directory used for tools
-  /reset                 Clear chat history
-  /clear                 Clear screen
-  /model <name>          Set model (recreates agent)
+        var table = new Table()
+            .Border(TableBorder.Rounded)
+            .BorderColor(Color.Grey)
+            .AddColumn(new TableColumn("[cyan]Command[/]").LeftAligned())
+            .AddColumn(new TableColumn("[cyan]Description[/]").LeftAligned());
 
-Anything else is sent to Wingman as your prompt.
-""");
+        table.AddRow("[yellow]/help[/]", "Show this help");
+        table.AddRow("[yellow]/exit[/], [yellow]/quit[/]", "Exit the REPL");
+        table.AddRow("[yellow]/cwd[/]", "Show current working directory");
+        table.AddRow("[yellow]/cd[/] [dim]<path>[/]", "Change working directory");
+        table.AddRow("[yellow]/reset[/]", "Clear conversation history");
+        table.AddRow("[yellow]/clear[/]", "Clear screen");
+        table.AddRow("[yellow]/model[/] [dim]<name>[/]", "Switch AI model (recreates agent)");
+
+        AnsiConsole.Write(table);
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("[dim]Type anything else to chat with Wingman[/]");
     }
 
     public static CommandParseResult Parse(string input)
@@ -47,54 +53,57 @@ Anything else is sent to Wingman as your prompt.
                 return CommandHandleResult.Exit();
 
             case "/cwd":
-                Console.WriteLine(workingDirectory);
+                AnsiConsole.MarkupLine($"[cyan]Working directory:[/] [yellow]{Markup.Escape(workingDirectory)}[/]");
                 return CommandHandleResult.Handled();
 
             case "/cd":
             {
                 if (string.IsNullOrWhiteSpace(parsed.Argument))
                 {
-                    Console.WriteLine("Usage: /cd <path>");
+                    AnsiConsole.MarkupLine("[yellow]Usage:[/] /cd <path>");
                     return CommandHandleResult.Handled();
                 }
 
                 var next = Path.GetFullPath(parsed.Argument);
                 if (!Directory.Exists(next))
                 {
-                    Console.WriteLine($"Directory does not exist: {next}");
+                    AnsiConsole.MarkupLine($"[red]✗[/] Directory does not exist: [yellow]{Markup.Escape(next)}[/]");
                     return CommandHandleResult.Handled();
                 }
 
                 workingDirectory = next;
+                AnsiConsole.MarkupLine($"[green]✓[/] Changed to: [yellow]{Markup.Escape(workingDirectory)}[/]");
                 return CommandHandleResult.Handled();
             }
 
             case "/reset":
                 history.Clear();
-                Console.WriteLine("History cleared.");
+                AnsiConsole.MarkupLine("[green]✓[/] Conversation history cleared");
                 return CommandHandleResult.Handled();
 
             case "/clear":
-                Console.Clear();
+                AnsiConsole.Clear();
                 return CommandHandleResult.Handled();
 
             case "/model":
             {
                 if (string.IsNullOrWhiteSpace(parsed.Argument))
                 {
-                    Console.WriteLine("Usage: /model <name>");
+                    AnsiConsole.MarkupLine("[yellow]Usage:[/] /model <name>");
                     return CommandHandleResult.Handled();
                 }
 
                 config.Model = parsed.Argument;
                 agent = new WingmanAgent(config);
                 history.Clear();
-                Console.WriteLine($"Model set to: {config.Model}");
+                AnsiConsole.MarkupLine($"[green]✓[/] Model set to: [yellow]{config.Model}[/]");
+                AnsiConsole.MarkupLine("[dim]Conversation history cleared[/]");
                 return CommandHandleResult.Handled();
             }
 
             default:
-                Console.WriteLine("Unknown command. Type /help.");
+                AnsiConsole.MarkupLine($"[red]✗[/] Unknown command: [yellow]{Markup.Escape(parsed.Command)}[/]");
+                AnsiConsole.MarkupLine("[dim]Type [cyan]/help[/] to see available commands[/]");
                 return CommandHandleResult.Handled();
         }
     }
