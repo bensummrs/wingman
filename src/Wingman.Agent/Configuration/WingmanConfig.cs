@@ -4,7 +4,7 @@ public class WingmanConfig
 {
     public string ApiKey { get; set; } = string.Empty;
 
-    public string Model { get; set; } = "claude-3-5-sonnet-20241022";
+    public string Model { get; set; } = "gpt-4o-mini";
 
     public int MaxTokens { get; set; } = 4096;
 

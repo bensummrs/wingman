@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using System.Text.Json;
+using System.Text.RegularExpressions;
+using Wingman.Agent.Tools.Extensions;
 
 namespace Wingman.Agent.Tools;
 
@@ -7,18 +9,164 @@ public static class FileOrganizerTools
 {
     private const string ApprovalPhrase = "I_APPROVE_FILE_CHANGES";
 
-    [Description("Lists the files in a directory (non-recursive) with basic metadata.")]
-    public static string ListDirectory(
-        [Description("Full path to the directory to list.")] string directoryPath)
+    [Description("Searches for directories on the user's machine based on a natural language description or name. Returns matching directory paths.")]
+    public static string FindDirectory(
+        [Description("Natural language description or name of the directory (e.g., 'downloads folder', 'my documents', 'desktop', or 'projects folder in my user directory').")] string directoryDescription,
+        [Description("Optional: Starting search location. If not provided, searches common user locations and all drives.")] string? searchRoot = null,
+        [Description("Maximum number of results to return.")] int maxResults = 10)
     {
-        if (string.IsNullOrWhiteSpace(directoryPath))
-            throw new ArgumentException("directoryPath is required.", nameof(directoryPath));
+        if (string.IsNullOrWhiteSpace(directoryDescription))
+            throw new ArgumentException("directoryDescription is required.", nameof(directoryDescription));
+
+        var matches = SearchForDirectories(directoryDescription, searchRoot, maxResults);
+
+        return JsonSerializer.Serialize(new
+        {
+            query = directoryDescription,
+            matchCount = matches.Count,
+            matches = matches.Select(m => new
+            {
+                path = m.Path,
+                matchScore = m.Score,
+                matchReason = m.Reason,
+            }),
+        });
+    }
+
+    [Description("Lists the files and subdirectories in a directory with basic metadata. Can resolve directory from description or exact path.")]
+    public static string ListDirectory(
+        [Description("Description or exact path of the directory to list (e.g., 'downloads folder', 'C:\\Users\\username\\Documents').")] string directoryPathOrDescription,
+        [Description("If true, includes subdirectories in the listing.")] bool includeSubdirectories = false)
+    {
+        if (string.IsNullOrWhiteSpace(directoryPathOrDescription))
+            throw new ArgumentException("directoryPathOrDescription is required.", nameof(directoryPathOrDescription));
+
+        var resolvedPath = directoryPathOrDescription.ResolveDirectoryPath();
+
+        if (!Directory.Exists(resolvedPath))
+            throw new DirectoryNotFoundException($"Directory not found: {resolvedPath} (resolved from: {directoryPathOrDescription})");
+
+        var items = new List<FileSystemItem>();
+
+        foreach (var filePath in Directory.EnumerateFiles(resolvedPath))
+        {
+            var info = new FileInfo(filePath);
+            items.Add(new FileSystemItem(
+                Type: "file",
+                Name: info.Name,
+                FullPath: info.FullName,
+                Extension: info.Extension,
+                SizeBytes: info.Length,
+                LastWriteTimeUtc: info.LastWriteTimeUtc
+            ));
+        }
+
+        if (includeSubdirectories)
+        {
+            foreach (var dirPath in Directory.EnumerateDirectories(resolvedPath))
+            {
+                var info = new DirectoryInfo(dirPath);
+                items.Add(new FileSystemItem(
+                    Type: "directory",
+                    Name: info.Name,
+                    FullPath: info.FullName,
+                    Extension: null,
+                    SizeBytes: null,
+                    LastWriteTimeUtc: info.LastWriteTimeUtc
+                ));
+            }
+        }
+
+        var sorted = items
+            .OrderBy(item => item.Type)
+            .ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var fileCount = items.Count(i => i.Type == "file");
+        var subdirectoryCount = items.Count(i => i.Type == "directory");
+
+        return JsonSerializer.Serialize(new
+        {
+            resolvedPath,
+            originalInput = directoryPathOrDescription,
+            fileCount,
+            subdirectoryCount,
+            items = sorted,
+        });
+    }
+
+    [Description("Moves a file or directory from one location to another. Supports natural language descriptions for source and destination.")]
+    public static string MoveItem(
+        [Description("Source path or description (e.g., 'report.pdf in downloads', 'C:\\temp\\file.txt').")] string sourcePathOrDescription,
+        [Description("Destination path or description (e.g., 'documents folder', 'C:\\Users\\username\\backup').")] string destinationPathOrDescription,
+        [Description("New name for the item (optional, keeps original name if not specified).")] string? newName = null,
+        [Description("Must exactly equal 'I_APPROVE_FILE_CHANGES' to perform the move.")] string approvalPhrase = "")
+    {
+        if (!string.Equals(approvalPhrase, ApprovalPhrase, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Refusing to modify files. approvalPhrase must be exactly '{ApprovalPhrase}'.");
+
+        var sourcePath = sourcePathOrDescription.ResolvePathWithFileName();
+        var destinationPath = sourcePathOrDescription.ResolveDirectoryPath();
+
+        if (!File.Exists(sourcePath) && !Directory.Exists(sourcePath))
+            throw new FileNotFoundException($"Source not found: {sourcePath} (resolved from: {sourcePathOrDescription})");
+
+        if (!Directory.Exists(destinationPath))
+            throw new DirectoryNotFoundException($"Destination directory not found: {destinationPath} (resolved from: {destinationPathOrDescription})");
+
+        var itemName = newName ?? Path.GetFileName(sourcePath);
+        var finalDestination = Path.Combine(destinationPath, itemName);
+        finalDestination = GetNonCollidingPath(finalDestination);
+
+        if (File.Exists(sourcePath))
+        {
+            File.Move(sourcePath, finalDestination);
+        }
+        else
+        {
+            Directory.Move(sourcePath, finalDestination);
+        }
+
+        return JsonSerializer.Serialize(new
+        {
+            source = sourcePath,
+            destination = finalDestination,
+            itemName,
+            moved = true,
+        });
+    }
+
+    [Description("Searches for files in a directory based on name pattern, extension, or size criteria.")]
+    public static string SearchFiles(
+        [Description("Directory path or description to search in.")] string directoryPathOrDescription,
+        [Description("File name pattern to match (e.g., '*.pdf', 'report*', 'document.txt'). Use * as wildcard.")] string? fileNamePattern = null,
+        [Description("File extension to filter by (e.g., '.pdf', '.docx'). Do not use with fileNamePattern.")] string? extension = null,
+        [Description("Minimum file size in bytes.")] long? minSizeBytes = null,
+        [Description("Maximum file size in bytes.")] long? maxSizeBytes = null,
+        [Description("If true, searches recursively in subdirectories.")] bool recursive = false,
+        [Description("Maximum number of results to return.")] int maxResults = 100)
+    {
+        var directoryPath = directoryPathOrDescription.ResolveDirectoryPath();
 
         if (!Directory.Exists(directoryPath))
-            throw new DirectoryNotFoundException($"Directory not found: {directoryPath}");
+            throw new DirectoryNotFoundException($"Directory not found: {directoryPath} (resolved from: {directoryPathOrDescription})");
 
-        var files = Directory.EnumerateFiles(directoryPath)
+        var searchOption = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+        var pattern = fileNamePattern ?? "*";
+
+        var files = Directory.EnumerateFiles(directoryPath, pattern, searchOption)
             .Select(p => new FileInfo(p))
+            .Where(f =>
+            {
+                if (extension != null && !f.Extension.Equals(extension, StringComparison.OrdinalIgnoreCase))
+                    return false;
+                if (minSizeBytes.HasValue && f.Length < minSizeBytes.Value)
+                    return false;
+                if (maxSizeBytes.HasValue && f.Length > maxSizeBytes.Value)
+                    return false;
+                return true;
+            })
+            .Take(maxResults)
             .Select(f => new
             {
                 name = f.Name,
@@ -26,28 +174,135 @@ public static class FileOrganizerTools
                 extension = f.Extension,
                 sizeBytes = f.Length,
                 lastWriteTimeUtc = f.LastWriteTimeUtc,
+                directory = Path.GetDirectoryName(f.FullName),
             })
             .OrderBy(f => f.name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         return JsonSerializer.Serialize(new
         {
-            directoryPath,
-            fileCount = files.Length,
+            searchDirectory = directoryPath,
+            originalInput = directoryPathOrDescription,
+            pattern,
+            recursive,
+            matchCount = files.Length,
             files,
         });
     }
 
-    [Description("Creates a preview plan to organize files in a directory by extension. Does not modify the file system.")]
+    [Description("Creates a new directory. Supports natural language descriptions for parent location.")]
+    public static string CreateDirectory(
+        [Description("Parent directory path or description where the new directory should be created.")] string parentPathOrDescription,
+        [Description("Name of the new directory to create.")] string directoryName,
+        [Description("Must exactly equal 'I_APPROVE_FILE_CHANGES' to create the directory.")] string approvalPhrase = "")
+    {
+        if (!string.Equals(approvalPhrase, ApprovalPhrase, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Refusing to modify file system. approvalPhrase must be exactly '{ApprovalPhrase}'.");
+
+        var parentPath = parentPathOrDescription.ResolveDirectoryPath();
+
+        if (!Directory.Exists(parentPath))
+            throw new DirectoryNotFoundException($"Parent directory not found: {parentPath} (resolved from: {parentPathOrDescription})");
+
+        var newDirectoryPath = Path.Combine(parentPath, directoryName);
+
+        if (Directory.Exists(newDirectoryPath))
+            throw new InvalidOperationException($"Directory already exists: {newDirectoryPath}");
+
+        Directory.CreateDirectory(newDirectoryPath);
+
+        return JsonSerializer.Serialize(new
+        {
+            created = true,
+            path = newDirectoryPath,
+            parentPath,
+            directoryName,
+        });
+    }
+
+    [Description("Deletes a file or directory. Use with caution.")]
+    public static string DeleteItem(
+        [Description("Path or description of file/directory to delete.")] string pathOrDescription,
+        [Description("If true and target is a directory, deletes all contents recursively.")] bool recursive = false,
+        [Description("Must exactly equal 'I_APPROVE_FILE_CHANGES' to perform deletion.")] string approvalPhrase = "")
+    {
+        if (!string.Equals(approvalPhrase, ApprovalPhrase, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Refusing to delete. approvalPhrase must be exactly '{ApprovalPhrase}'.");
+
+        var resolvedPath = pathOrDescription.ResolvePathWithFileName();
+
+        if (File.Exists(resolvedPath))
+        {
+            File.Delete(resolvedPath);
+            return JsonSerializer.Serialize(new
+            {
+                deleted = true,
+                path = resolvedPath,
+                type = "file",
+            });
+        }
+        else if (Directory.Exists(resolvedPath))
+        {
+            Directory.Delete(resolvedPath, recursive);
+            return JsonSerializer.Serialize(new
+            {
+                deleted = true,
+                path = resolvedPath,
+                type = "directory",
+                recursive,
+            });
+        }
+        else
+        {
+            throw new FileNotFoundException($"Item not found: {resolvedPath} (resolved from: {pathOrDescription})");
+        }
+    }
+
+    [Description("Copies a file to another location. Supports natural language descriptions.")]
+    public static string CopyFile(
+        [Description("Source file path or description.")] string sourcePathOrDescription,
+        [Description("Destination directory path or description.")] string destinationPathOrDescription,
+        [Description("New name for the copied file (optional).")] string? newName = null,
+        [Description("Must exactly equal 'I_APPROVE_FILE_CHANGES' to perform the copy.")] string approvalPhrase = "")
+    {
+        if (!string.Equals(approvalPhrase, ApprovalPhrase, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Refusing to modify files. approvalPhrase must be exactly '{ApprovalPhrase}'.");
+
+        var sourcePath = sourcePathOrDescription.ResolvePathWithFileName();
+        var destinationPath = destinationPathOrDescription.ResolveDirectoryPath();
+
+        if (!File.Exists(sourcePath))
+            throw new FileNotFoundException($"Source file not found: {sourcePath} (resolved from: {sourcePathOrDescription})");
+
+        if (!Directory.Exists(destinationPath))
+            throw new DirectoryNotFoundException($"Destination directory not found: {destinationPath} (resolved from: {destinationPathOrDescription})");
+
+        var fileName = newName ?? Path.GetFileName(sourcePath);
+        var finalDestination = Path.Combine(destinationPath, fileName);
+        finalDestination = GetNonCollidingPath(finalDestination);
+
+        File.Copy(sourcePath, finalDestination);
+
+        return JsonSerializer.Serialize(new
+        {
+            source = sourcePath,
+            destination = finalDestination,
+            copied = true,
+        });
+    }
+
+    [Description("Creates a preview plan to organize files in a directory by extension. Does not modify the file system. Supports natural language directory descriptions.")]
     public static string PreviewOrganizeByExtension(
-        [Description("Full path to the directory to organize.")] string directoryPath,
+        [Description("Path or description of the directory to organize (e.g., 'downloads folder', 'C:\\Users\\username\\Documents').")] string directoryPathOrDescription,
         [Description("If true, include hidden files (Windows hidden attribute).")] bool includeHidden = false)
     {
-        if (string.IsNullOrWhiteSpace(directoryPath))
-            throw new ArgumentException("directoryPath is required.", nameof(directoryPath));
+        if (string.IsNullOrWhiteSpace(directoryPathOrDescription))
+            throw new ArgumentException("directoryPathOrDescription is required.", nameof(directoryPathOrDescription));
+
+        var directoryPath = directoryPathOrDescription.ResolveDirectoryPath();
 
         if (!Directory.Exists(directoryPath))
-            throw new DirectoryNotFoundException($"Directory not found: {directoryPath}");
+            throw new DirectoryNotFoundException($"Directory not found: {directoryPath} (resolved from: {directoryPathOrDescription})");
 
         var moves = new List<FileMove>();
 
@@ -82,6 +337,8 @@ public static class FileOrganizerTools
 
         return JsonSerializer.Serialize(new
         {
+            resolvedPath = directoryPath,
+            originalInput = directoryPathOrDescription,
             plan,
             summary,
             safety = new
@@ -155,6 +412,140 @@ public static class FileOrganizerTools
         return null;
     }
 
+    internal static List<DirectoryMatch> SearchForDirectories(string description, string? searchRoot, int maxResults)
+    {
+        var matches = new List<DirectoryMatch>();
+        var searchTerms = ExtractSearchTerms(description);
+
+        var searchRoots = new List<string>();
+        if (!string.IsNullOrEmpty(searchRoot) && Directory.Exists(searchRoot))
+        {
+            searchRoots.Add(searchRoot);
+        }
+        else
+        {
+            var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (!string.IsNullOrEmpty(userProfile))
+            {
+                searchRoots.Add(userProfile);
+                var downloads = Path.Combine(userProfile, "Downloads");
+                if (Directory.Exists(downloads)) searchRoots.Add(downloads);
+            }
+
+            searchRoots.Add(Environment.GetFolderPath(Environment.SpecialFolder.Desktop));
+            searchRoots.Add(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
+
+            try
+            {
+                searchRoots.AddRange(DriveInfo.GetDrives()
+                    .Where(d => d.IsReady && d.DriveType == DriveType.Fixed)
+                    .Select(d => d.RootDirectory.FullName));
+            }
+            catch
+            {
+            }
+        }
+
+        foreach (var root in searchRoots.Distinct())
+        {
+            if (!Directory.Exists(root)) continue;
+
+            try
+            {
+                SearchDirectoryRecursive(root, searchTerms, matches, maxResults, maxDepth: 5, currentDepth: 0);
+                if (matches.Count >= maxResults) break;
+            }
+            catch
+            {
+            }
+        }
+
+        return matches
+            .OrderByDescending(m => m.Score)
+            .Take(maxResults)
+            .ToList();
+    }
+
+    private static void SearchDirectoryRecursive(
+        string currentPath,
+        List<string> searchTerms,
+        List<DirectoryMatch> matches,
+        int maxResults,
+        int maxDepth,
+        int currentDepth)
+    {
+        if (matches.Count >= maxResults || currentDepth > maxDepth)
+            return;
+
+        try
+        {
+            var dirInfo = new DirectoryInfo(currentPath);
+            var dirName = dirInfo.Name.ToLowerInvariant();
+
+            var score = 0;
+            var matchReasons = new List<string>();
+
+            foreach (var term in searchTerms)
+            {
+                if (dirName.Equals(term, StringComparison.OrdinalIgnoreCase))
+                {
+                    score += 100;
+                    matchReasons.Add($"Exact match: '{term}'");
+                }
+                else if (dirName.Contains(term))
+                {
+                    score += 50;
+                    matchReasons.Add($"Contains: '{term}'");
+                }
+                else if (dirName.StartsWith(term, StringComparison.OrdinalIgnoreCase))
+                {
+                    score += 75;
+                    matchReasons.Add($"Starts with: '{term}'");
+                }
+            }
+
+            score -= currentDepth * 5;
+
+            if (score > 0)
+            {
+                matches.Add(new DirectoryMatch(
+                    Path: currentPath,
+                    Score: score,
+                    Reason: string.Join(", ", matchReasons)
+                ));
+            }
+
+            if (currentDepth < maxDepth)
+            {
+                foreach (var subDir in Directory.EnumerateDirectories(currentPath))
+                {
+                    try
+                    {
+                        SearchDirectoryRecursive(subDir, searchTerms, matches, maxResults, maxDepth, currentDepth + 1);
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private static List<string> ExtractSearchTerms(string description)
+    {
+        var stopWords = new HashSet<string> { "the", "my", "folder", "directory", "in", "on", "at", "a", "an" };
+
+        return Regex.Split(description.ToLowerInvariant(), @"\s+")
+            .Where(term => !string.IsNullOrWhiteSpace(term) && !stopWords.Contains(term))
+            .ToList();
+    }
+
+    internal sealed record DirectoryMatch(string Path, int Score, string Reason);
+    private sealed record FileSystemItem(string Type, string Name, string FullPath, string? Extension, long? SizeBytes, DateTime LastWriteTimeUtc);
+
     private static string ExtensionToFolder(string extension)
     {
         extension = (extension ?? string.Empty).Trim().ToLowerInvariant();
@@ -177,7 +568,7 @@ public static class FileOrganizerTools
 
     private static string GetNonCollidingPath(string destinationPath)
     {
-        if (!File.Exists(destinationPath))
+        if (!File.Exists(destinationPath) && !Directory.Exists(destinationPath))
             return destinationPath;
 
         var dir = Path.GetDirectoryName(destinationPath) ?? throw new InvalidOperationException("Invalid destination path.");
@@ -187,11 +578,11 @@ public static class FileOrganizerTools
         for (int i = 1; i < 10_000; i++)
         {
             var candidate = Path.Combine(dir, $"{fileNameWithoutExt} ({i}){ext}");
-            if (!File.Exists(candidate))
+            if (!File.Exists(candidate) && !Directory.Exists(candidate))
                 return candidate;
         }
 
-        throw new IOException($"Could not find a non-colliding destination filename for {destinationPath}");
+        throw new IOException($"Could not find a non-colliding destination path for {destinationPath}");
     }
 
     public sealed record FileMove(string Source, string Destination);

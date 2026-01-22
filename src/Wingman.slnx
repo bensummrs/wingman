@@ -1,6 +1,5 @@
 <Solution>
   <Project Path="Wingman.Agent/Wingman.Agent.csproj" />
   <Project Path="Wingman.Cli/Wingman.Cli.csproj" />
-  <Project Path="Wingman.Powershell/Wingman.Powershell.csproj" />
   <Project Path="Wingman.Tests/Wingman.Tests.csproj" />
 </Solution>

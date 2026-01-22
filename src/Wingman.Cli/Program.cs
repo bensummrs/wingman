@@ -2,7 +2,7 @@ using Wingman.Agent.Configuration;
 using Wingman.Cli;
 
 
-var load = WingmanCliConfigLoader.TryLoadFromEnvironment();
+var load = WingmanCliConfigLoader.TryLoad();
 if (!string.IsNullOrEmpty(load.ErrorMessage))
 {
     Console.Error.WriteLine(load.ErrorMessage);

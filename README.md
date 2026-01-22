@@ -28,17 +28,29 @@ dotnet build
 
 ### 2. Configure API Key
 
-Copy `.env.example` to `.env` and add your Anthropic API key:
+**Option 1: Config File (Recommended)**
 
-```bash
-ANTHROPIC_API_KEY=your_actual_api_key_here
+Copy `wingman.config.json.example` to `wingman.config.json` and add your API key:
+
+```json
+{
+  "ApiKey": "your-anthropic-api-key-here",
+  "Model": "claude-3-5-sonnet-20241022",
+  "MaxTokens": 4096
+}
 ```
 
-Or set it as an environment variable:
+Place this file in:
+- The project directory, OR
+- Your home directory (`C:\Users\YourName\wingman.config.json`)
+
+**Option 2: Environment Variable**
 
 ```powershell
 $env:ANTHROPIC_API_KEY = "your_actual_api_key_here"
 ```
+
+(Note: Environment variables only work for the current session unless set permanently)
 
 ### 3. Import PowerShell Module
 

@@ -31,6 +31,9 @@ bld/
 *.env
 !.env.example
 
+## Configuration files (may contain API keys)
+wingman.config.json
+
 ## Test results
 TestResults/
 *.trx
