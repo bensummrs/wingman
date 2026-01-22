@@ -1,3 +1,4 @@
+using System.Runtime.Versioning;
 using System.Text.RegularExpressions;
 
 namespace Wingman.Agent.Tools.Extensions;
@@ -6,6 +7,7 @@ internal static class PathExtensions
 {
     internal static string? CurrentWorkingDirectory { get; set; }
 
+    [SupportedOSPlatform("windows")]
     internal static string ResolveDirectoryPath(this string pathOrDescription)
     {
         // 1. Check if it's an absolute path that exists
@@ -39,6 +41,7 @@ internal static class PathExtensions
         return pathOrDescription;
     }
 
+    [SupportedOSPlatform("windows")]
     internal static string ResolvePathWithFileName(this string pathOrDescription)
     {
         // 1. Check if it's a direct path that exists

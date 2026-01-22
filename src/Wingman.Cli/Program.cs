@@ -1,7 +1,10 @@
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using Spectre.Console;
 using Wingman.Agent.Configuration;
 using Wingman.Cli;
+
+[assembly: SupportedOSPlatform("windows")]
 
 //you could pull down and remove the macos runtime check block, but doing so will make me really upset x
 if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))

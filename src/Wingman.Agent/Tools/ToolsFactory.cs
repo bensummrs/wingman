@@ -1,7 +1,9 @@
+using System.Runtime.Versioning;
 using Microsoft.Extensions.AI;
 
 namespace Wingman.Agent.Tools;
 
+[SupportedOSPlatform("windows")]
 public static class ToolsFactory
 {
     public static IReadOnlyList<AITool> CreateDefaultTools()

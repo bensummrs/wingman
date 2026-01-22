@@ -1,10 +1,13 @@
 using System.ComponentModel;
+using System.Data.OleDb;
+using System.Runtime.Versioning;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Wingman.Agent.Tools.Extensions;
 
 namespace Wingman.Agent.Tools;
 
+[SupportedOSPlatform("windows")]
 public static class FileOrganizerTools
 {
     private const string ApprovalPhrase = "I_APPROVE_FILE_CHANGES";
@@ -33,6 +36,7 @@ public static class FileOrganizerTools
     }
 
     [Description("Searches for directories on the user's machine based on a natural language description or name. Returns matching directory paths. Use this when the user describes a directory rather than providing a direct path.")]
+    [SupportedOSPlatform("windows")]
     public static string FindDirectory(
         [Description("Natural language description or name of the directory (e.g., 'downloads folder', 'my documents', 'desktop', or 'projects folder in my user directory').")] string directoryDescription,
         [Description("Optional: Starting search location. If not provided, searches common user locations and all drives.")] string? searchRoot = null,
@@ -401,10 +405,27 @@ public static class FileOrganizerTools
         return null;
     }
 
+    [SupportedOSPlatform("windows")]
     internal static List<DirectoryMatch> SearchForDirectories(string description, string? searchRoot, int maxResults)
     {
         var matches = new List<DirectoryMatch>();
         var searchTerms = ExtractSearchTerms(description);
+
+        if (IsLikelyIndexedLocation(searchRoot))
+        {
+            try
+            {
+                var indexedMatches = SearchUsingWindowsSearch(searchTerms, searchRoot, maxResults);
+                matches.AddRange(indexedMatches);
+                
+                if (matches.Count >= maxResults && matches.Any(m => m.Score >= 100))
+                    return matches.OrderByDescending(m => m.Score).Take(maxResults).ToList();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Windows Search unavailable, using manual search: {ex.Message}");
+            }
+        }
 
         var searchRoots = new List<string>();
         
@@ -440,13 +461,141 @@ public static class FileOrganizerTools
             if (!Directory.Exists(root) || !processedRoots.Add(root)) 
                 continue;
 
-            SearchDirectoryRecursive(root, searchTerms, matches, maxResults, maxDepth: 5, currentDepth: 0);
+            try
+            {
+                SearchDirectoryRecursive(root, searchTerms, matches, maxResults, maxDepth: 5, currentDepth: 0);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Skip root directories we don't have permission to access
+                continue;
+            }
+            catch (IOException)
+            {
+                // Skip root directories with IO errors
+                continue;
+            }
             
             if (matches.Count >= maxResults && matches.Any(m => m.Score >= 100)) 
                 break;
         }
 
         return matches.OrderByDescending(m => m.Score).Take(maxResults).ToList();
+    }
+
+    private static bool IsLikelyIndexedLocation(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return true;
+        }
+
+        path = path.ToLowerInvariant();
+        
+        var indexedFolders = new[]
+        {
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile).ToLowerInvariant(),
+            Environment.GetFolderPath(Environment.SpecialFolder.Desktop).ToLowerInvariant(),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments).ToLowerInvariant(),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyPictures).ToLowerInvariant(),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyMusic).ToLowerInvariant(),
+            Environment.GetFolderPath(Environment.SpecialFolder.MyVideos).ToLowerInvariant(),
+        };
+
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrEmpty(userProfile))
+        {
+            var downloads = Path.Combine(userProfile, "Downloads").ToLowerInvariant();
+            indexedFolders = indexedFolders.Append(downloads).ToArray();
+        }
+
+        return indexedFolders.Any(indexed => path.StartsWith(indexed, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static List<DirectoryMatch> SearchUsingWindowsSearch(List<string> searchTerms, string? searchRoot, int maxResults)
+    {
+        var matches = new List<DirectoryMatch>();
+        
+        if (searchTerms.Count == 0)
+            return matches;
+
+        var connectionString = "Provider=Search.CollatorDSO;Extended Properties='Application=Windows'";
+        
+        using var connection = new OleDbConnection(connectionString);
+        connection.Open();
+
+        var searchConditions = new List<string>();
+        foreach (var term in searchTerms)
+        {
+            var escapedTerm = term.Replace("'", "''");
+            searchConditions.Add($"CONTAINS(System.ItemName, '\"{escapedTerm}\"')");
+        }
+        
+        var whereClause = string.Join(" OR ", searchConditions);
+        
+        var scopeClause = "";
+        if (!string.IsNullOrEmpty(searchRoot) && Directory.Exists(searchRoot))
+        {
+            var escapedPath = searchRoot.Replace("'", "''");
+            scopeClause = $"AND System.ItemPathDisplay LIKE '{escapedPath}%'";
+        }
+
+        var query = $@"
+            SELECT TOP {maxResults} 
+                System.ItemPathDisplay, 
+                System.ItemName,
+                System.DateModified
+            FROM SystemIndex 
+            WHERE System.Kind = 'folder' 
+            AND ({whereClause})
+            {scopeClause}
+            ORDER BY System.DateModified DESC";
+
+        using var command = new OleDbCommand(query, connection);
+        command.CommandTimeout = 5; // 5 second timeout
+        
+        using var reader = command.ExecuteReader();
+        
+        while (reader.Read() && matches.Count < maxResults)
+        {
+            var path = reader["System.ItemPathDisplay"]?.ToString();
+            var name = reader["System.ItemName"]?.ToString();
+            
+            if (!string.IsNullOrEmpty(path) && Directory.Exists(path))
+            {
+                var score = CalculateMatchScore(name ?? Path.GetFileName(path) ?? "", searchTerms);
+                var reason = "Found via Windows Search Index";
+                
+                matches.Add(new DirectoryMatch(path, score, reason));
+            }
+        }
+
+        return matches;
+    }
+
+    private static int CalculateMatchScore(string directoryName, List<string> searchTerms)
+    {
+        var score = 0;
+        var lowerName = directoryName.ToLowerInvariant();
+
+        foreach (var term in searchTerms)
+        {
+            if (lowerName.Equals(term, StringComparison.OrdinalIgnoreCase))
+            {
+                score += 100;
+            }
+            else if (lowerName.StartsWith(term, StringComparison.OrdinalIgnoreCase))
+            {
+                score += 75;
+            }
+            else if (lowerName.Contains(term))
+            {
+                score += 50;
+            }
+        }
+
+        return score;
     }
 
     private static void SearchDirectoryRecursive(
@@ -492,9 +641,38 @@ public static class FileOrganizerTools
 
         if (currentDepth < maxDepth)
         {
-            foreach (var subDir in Directory.EnumerateDirectories(currentPath))
+            try
             {
-                SearchDirectoryRecursive(subDir, searchTerms, matches, maxResults, maxDepth, currentDepth + 1);
+                foreach (var subDir in Directory.EnumerateDirectories(currentPath))
+                {
+                    try
+                    {
+                        SearchDirectoryRecursive(subDir, searchTerms, matches, maxResults, maxDepth, currentDepth + 1);
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                        // Skip directories we don't have permission to access
+                        continue;
+                    }
+                    catch (DirectoryNotFoundException)
+                    {
+                        // Skip directories that no longer exist (e.g., junctions)
+                        continue;
+                    }
+                    catch (IOException)
+                    {
+                        // Skip directories with IO errors
+                        continue;
+                    }
+                }
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Cannot enumerate subdirectories
+            }
+            catch (DirectoryNotFoundException)
+            {
+                // Directory no longer exists
             }
         }
     }

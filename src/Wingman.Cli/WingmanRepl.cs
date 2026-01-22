@@ -1,3 +1,4 @@
+using System.Runtime.Versioning;
 using System.Text;
 using Spectre.Console;
 using Wingman.Agent;
@@ -5,6 +6,7 @@ using Wingman.Agent.Configuration;
 
 namespace Wingman.Cli;
 
+[SupportedOSPlatform("windows")]
 public sealed class WingmanRepl
 {
     private readonly WingmanConfig config;

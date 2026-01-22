@@ -33,6 +33,7 @@ public class WingmanAgent
         return chatClient.AsAIAgent(prompt, tools: tools);
     }
 
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public async Task RunStreamingWithToolsAsync(string prompt, string? workingDirectory = null, Action<string, bool>? onTextUpdate = null)
     {
         PathExtensions.CurrentWorkingDirectory = workingDirectory;
