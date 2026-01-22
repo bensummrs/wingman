@@ -8,7 +8,16 @@ public static class ToolsFactory
 {
     public static IReadOnlyList<AITool> CreateDefaultTools()
     {
-        return CreateFileOrganizerTools();
+        return [.. CreateFileOrganizerTools(), .. CreatePdfTools()];
+    }
+
+    public static IReadOnlyList<AITool> CreatePdfTools()
+    {
+        return
+        [
+            AIFunctionFactory.Create(PdfTools.ReadPdf),
+            AIFunctionFactory.Create(PdfTools.GetPdfInfo),
+        ];
     }
 
     public static IReadOnlyList<AITool> CreateFileOrganizerTools()
