@@ -42,14 +42,21 @@ public sealed class WingmanRepl
 
             try
             {
-                var response = await agent.RunWithToolsAsync(composedPrompt, workingDirectory);
-                var text = ChatResponseText.ExtractText(response);
-                if (string.IsNullOrWhiteSpace(text))
-                    text = "(no text content returned)";
+                Console.WriteLine();
+                var fullResponse = new System.Text.StringBuilder();
+
+                await agent.RunStreamingWithToolsAsync(composedPrompt, workingDirectory, onTextUpdate: text =>
+                {
+                    Console.Write(text);
+                    fullResponse.Append(text);
+                });
 
                 Console.WriteLine();
-                Console.WriteLine(text);
                 Console.WriteLine();
+
+                var text = fullResponse.ToString();
+                if (string.IsNullOrWhiteSpace(text))
+                    text = "(no text content returned)";
 
                 history.AddUser(input);
                 history.AddAssistant(text);

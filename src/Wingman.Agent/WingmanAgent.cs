@@ -22,7 +22,7 @@ public class WingmanAgent
         this.config.Validate();
     }
 
-    private async Task<AIAgent> CreateAnthropicAgent(string prompt, List<AITool> tools)
+    private AIAgent CreateAnthropicAgent(string prompt, List<AITool> tools)
     {
         var chatClient = new AnthropicClient(new Anthropic.Core.ClientOptions { APIKey = config.ApiKey }).AsIChatClient(config.Model);
         return chatClient.AsAIAgent(prompt, tools: tools);
@@ -41,8 +41,30 @@ public class WingmanAgent
 
         Be helpful, safe, and always confirm before moving or modifying files.";
 
-        var agent = await CreateAnthropicAgent(basePrompt, ToolsFactory.CreateDefaultTools().ToList());
+        var agent = CreateAnthropicAgent(basePrompt, ToolsFactory.CreateDefaultTools().ToList());
         var response = await agent.RunAsync(prompt);
         return response.AsChatResponse();
+    }
+
+    public async Task RunStreamingWithToolsAsync(string prompt, string? workingDirectory = null, Action<string>? onTextUpdate = null)
+    {
+        var basePrompt = $@"{this.systemPrompt}
+        {(workingDirectory != null ? $"Current working directory: {workingDirectory}" : "")}
+
+        When asked to organize files:
+        1. First analyze the directory to understand what's there
+        2. Suggest an organization strategy
+        3. Ask for confirmation before making changes
+        4. Use preview mode first, then apply changes if approved
+
+        Be helpful, safe, and always confirm before moving or modifying files.";
+
+        var agent = CreateAnthropicAgent(basePrompt, ToolsFactory.CreateDefaultTools().ToList());
+        
+        await foreach (var update in agent.RunStreamingAsync(prompt))
+        {
+            var text = update.Text;
+            onTextUpdate?.Invoke(text);
+        }
     }
 }
