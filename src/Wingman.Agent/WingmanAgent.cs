@@ -5,6 +5,7 @@ using OpenAI;
 using OpenAI.Chat;
 using Wingman.Agent.Configuration;
 using Wingman.Agent.Tools;
+using Wingman.Agent.Tools.Extensions;
 
 namespace Wingman.Agent;
 
@@ -30,6 +31,8 @@ public class WingmanAgent
 
     public async Task<ChatResponse> RunWithToolsAsync(string prompt, string? workingDirectory = null)
     {
+        PathExtensions.CurrentWorkingDirectory = workingDirectory;
+
         var basePrompt = $@"{this.systemPrompt}
         {(workingDirectory != null ? $"Current working directory: {workingDirectory}" : "")}
 
@@ -38,6 +41,11 @@ public class WingmanAgent
         2. Suggest an organization strategy
         3. Ask for confirmation before making changes
         4. Use preview mode first, then apply changes if approved
+
+        When the user provides a direct path or says ""here's this file"":
+        - Use ResolvePath first to quickly resolve the path
+        - Support absolute paths, relative paths, and file names
+        - Check current working directory before searching
 
         Be helpful, safe, and always confirm before moving or modifying files.";
 
@@ -48,6 +56,8 @@ public class WingmanAgent
 
     public async Task RunStreamingWithToolsAsync(string prompt, string? workingDirectory = null, Action<string, bool>? onTextUpdate = null)
     {
+        PathExtensions.CurrentWorkingDirectory = workingDirectory;
+
         var basePrompt = $@"{this.systemPrompt}
         {(workingDirectory != null ? $"Current working directory: {workingDirectory}" : "")}
 
@@ -56,6 +66,11 @@ public class WingmanAgent
         2. Suggest an organization strategy
         3. Ask for confirmation before making changes
         4. Use preview mode first, then apply changes if approved
+
+        When the user provides a direct path or says ""here's this file"":
+        - Use ResolvePath first to quickly resolve the path
+        - Support absolute paths, relative paths, and file names
+        - Check current working directory before searching
 
         Be helpful, safe, and always confirm before moving or modifying files.";
 

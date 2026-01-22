@@ -9,7 +9,30 @@ public static class FileOrganizerTools
 {
     private const string ApprovalPhrase = "I_APPROVE_FILE_CHANGES";
 
-    [Description("Searches for directories on the user's machine based on a natural language description or name. Returns matching directory paths.")]
+    [Description("Quickly resolves a file or directory path. Supports absolute paths, relative paths (from current working directory), environment variables, and pasted paths from Windows Explorer. Use this when the user provides a direct path or file name.")]
+    public static string ResolvePath(
+        [Description("The path to resolve. Can be absolute (C:\\...), relative (src\\file.txt), just a filename (document.pdf), or a Windows Explorer path.")] string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("path is required.", nameof(path));
+
+        var resolvedPath = path.ResolvePathWithFileName();
+
+        bool exists = File.Exists(resolvedPath) || Directory.Exists(resolvedPath);
+        string type = File.Exists(resolvedPath) ? "file" : Directory.Exists(resolvedPath) ? "directory" : "not_found";
+
+        return JsonSerializer.Serialize(new
+        {
+            originalPath = path,
+            resolvedPath,
+            exists,
+            type,
+            isAbsolute = Path.IsPathFullyQualified(resolvedPath),
+            workingDirectory = PathExtensions.CurrentWorkingDirectory ?? "(not set)",
+        });
+    }
+
+    [Description("Searches for directories on the user's machine based on a natural language description or name. Returns matching directory paths. Use this when the user describes a directory rather than providing a direct path.")]
     public static string FindDirectory(
         [Description("Natural language description or name of the directory (e.g., 'downloads folder', 'my documents', 'desktop', or 'projects folder in my user directory').")] string directoryDescription,
         [Description("Optional: Starting search location. If not provided, searches common user locations and all drives.")] string? searchRoot = null,
@@ -406,34 +429,43 @@ public static class FileOrganizerTools
         var searchTerms = ExtractSearchTerms(description);
 
         var searchRoots = new List<string>();
+        
         if (!string.IsNullOrEmpty(searchRoot) && Directory.Exists(searchRoot))
         {
             searchRoots.Add(searchRoot);
-        }
-        else
-        {
-            var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            if (!string.IsNullOrEmpty(userProfile))
+            
+            var parent = Directory.GetParent(searchRoot);
+            if (parent != null && parent.Exists)
             {
-                searchRoots.Add(userProfile);
-                var downloads = Path.Combine(userProfile, "Downloads");
-                if (Directory.Exists(downloads)) searchRoots.Add(downloads);
+                searchRoots.Add(parent.FullName);
             }
-
-            searchRoots.Add(Environment.GetFolderPath(Environment.SpecialFolder.Desktop));
-            searchRoots.Add(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
-
-            searchRoots.AddRange(DriveInfo.GetDrives()
-                .Where(d => d.IsReady && d.DriveType == DriveType.Fixed)
-                .Select(d => d.RootDirectory.FullName));
+        }
+        
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrEmpty(userProfile))
+        {
+            searchRoots.Add(userProfile);
+            var downloads = Path.Combine(userProfile, "Downloads");
+            if (Directory.Exists(downloads)) searchRoots.Add(downloads);
         }
 
-        foreach (var root in searchRoots.Distinct())
+        searchRoots.Add(Environment.GetFolderPath(Environment.SpecialFolder.Desktop));
+        searchRoots.Add(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
+
+        searchRoots.AddRange(DriveInfo.GetDrives()
+            .Where(d => d.IsReady && d.DriveType == DriveType.Fixed)
+            .Select(d => d.RootDirectory.FullName));
+
+        var processedRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var root in searchRoots)
         {
-            if (!Directory.Exists(root)) continue;
+            if (!Directory.Exists(root) || !processedRoots.Add(root)) 
+                continue;
 
             SearchDirectoryRecursive(root, searchTerms, matches, maxResults, maxDepth: 5, currentDepth: 0);
-            if (matches.Count >= maxResults) break;
+            
+            if (matches.Count >= maxResults && matches.Any(m => m.Score >= 100)) 
+                break;
         }
 
         return matches.OrderByDescending(m => m.Score).Take(maxResults).ToList();
