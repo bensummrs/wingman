@@ -9,7 +9,6 @@ public static class WingmanCliConfigLoader
     
     public static ConfigLoadResult TryLoad()
     {
-        // Try 1: Load from config file in current directory
         var currentDirConfig = Path.Combine(Directory.GetCurrentDirectory(), ConfigFileName);
         if (File.Exists(currentDirConfig))
         {
@@ -17,7 +16,6 @@ public static class WingmanCliConfigLoader
             if (result.Success) return result;
         }
 
-        // Try 2: Load from config file in user's home directory
         var homeDirConfig = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ConfigFileName);
         if (File.Exists(homeDirConfig))
         {
@@ -25,11 +23,9 @@ public static class WingmanCliConfigLoader
             if (result.Success) return result;
         }
 
-        // Try 3: Load from environment variables
         var envResult = TryLoadFromEnvironment();
         if (envResult.Success) return envResult;
 
-        // Nothing worked - give helpful error
         return ConfigLoadResult.FailureResult(
             $"Missing API key. Create a '{ConfigFileName}' file with your API key:\n\n" +
             "{\n" +
