@@ -1,3 +1,4 @@
+using System.Text;
 using Spectre.Console;
 using Wingman.Agent;
 using Wingman.Agent.Configuration;
@@ -24,67 +25,87 @@ public sealed class WingmanRepl
 
         while (true)
         {
-            var shortPath = GetShortPath(workingDirectory);
-            AnsiConsole.Markup($"[bold cyan]wingman[/] [dim]{shortPath}[/] [bold green]❯[/] ");
-            var input = Console.ReadLine()?.Trim() ?? string.Empty;
-
-            if (input.Length == 0)
+            var input = ReadUserInput();
+            
+            if (string.IsNullOrEmpty(input))
                 continue;
 
             if (input.StartsWith('/'))
             {
-                var parsed = ReplCommands.Parse(input);
-                var handled = ReplCommands.TryHandle(parsed, config, history, ref agent, ref workingDirectory);
-                if (handled.ShouldExit)
-                {
-                    AnsiConsole.MarkupLine("[dim]Goodbye! 👋[/]");
+                if (HandleCommand(input))
                     return 0;
-                }
                 continue;
             }
 
-            var composedPrompt = history.ComposePrompt(input);
-
-            try
-            {
-                AnsiConsole.WriteLine();
-                var fullResponse = new System.Text.StringBuilder();
-
-                await agent.RunStreamingWithToolsAsync(composedPrompt, workingDirectory, onTextUpdate: text =>
-                {
-                    AnsiConsole.Markup($"[grey]{Markup.Escape(text)}[/]");
-                    fullResponse.Append(text);
-                });
-
-                AnsiConsole.WriteLine();
-                AnsiConsole.WriteLine();
-
-                var text = fullResponse.ToString();
-                if (string.IsNullOrWhiteSpace(text))
-                    text = "(no text content returned)";
-
-                history.AddUser(input);
-                history.AddAssistant(text);
-            }
-            catch (Exception ex)
-            {
-                AnsiConsole.WriteLine();
-                AnsiConsole.MarkupLine($"[red bold]✗[/] [red]Error:[/] {Markup.Escape(ex.Message)}");
-                if (ex.InnerException != null)
-                {
-                    AnsiConsole.MarkupLine($"[dim]{Markup.Escape(ex.InnerException.Message)}[/]");
-                }
-                AnsiConsole.WriteLine();
-            }
+            await ProcessUserMessageAsync(input);
         }
+    }
+
+    private string ReadUserInput()
+    {
+        var shortPath = GetShortPath(workingDirectory);
+        AnsiConsole.Markup($"[bold cyan]wingman[/] [dim]{shortPath}[/] [bold green]❯[/] ");
+        return Console.ReadLine()?.Trim() ?? string.Empty;
+    }
+
+    private bool HandleCommand(string input)
+    {
+        var parsed = ReplCommands.Parse(input);
+        var handled = ReplCommands.TryHandle(parsed, config, history, ref agent, ref workingDirectory);
+        
+        if (handled.ShouldExit)
+            AnsiConsole.MarkupLine("[dim]Goodbye! 👋[/]");
+        
+        return handled.ShouldExit;
+    }
+
+    private async Task ProcessUserMessageAsync(string input)
+    {
+        var composedPrompt = history.ComposePrompt(input);
+
+        try
+        {
+            AnsiConsole.WriteLine();
+            var fullResponse = new StringBuilder();
+
+            await agent.RunStreamingWithToolsAsync(composedPrompt, workingDirectory, onTextUpdate: (text, isThinking) =>
+            {
+                var color = isThinking ? Color.Grey : Color.White;
+                AnsiConsole.Write(new Text(text, new Style(foreground: color)));
+                fullResponse.Append(text);
+            });
+
+            AnsiConsole.WriteLine();
+            AnsiConsole.WriteLine();
+
+            var responseText = fullResponse.ToString();
+            history.AddUser(input);
+            history.AddAssistant(string.IsNullOrWhiteSpace(responseText) ? "(no text content returned)" : responseText);
+        }
+        catch (Exception ex)
+        {
+            DisplayError(ex);
+        }
+    }
+
+    private static void DisplayError(Exception ex)
+    {
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine($"[red bold]✗[/] [red]Error:[/] {Markup.Escape(ex.Message)}");
+        
+        if (ex.InnerException != null)
+            AnsiConsole.MarkupLine($"[dim]{Markup.Escape(ex.InnerException.Message)}[/]");
+        
+        AnsiConsole.WriteLine();
     }
 
     private void ShowWelcomeBanner()
     {
-        var panel = new Panel(new Markup(
-            "[bold cyan]Wingman AI Assistant[/]\n" +
-            $"[dim]Model:[/] [yellow]{config.Model}[/]\n" +
-            "[dim]Type [cyan]/help[/] for commands[/]"))
+        var bannerText = $"[bold cyan]Wingman AI Assistant[/]\n" +
+                         $"[dim]Model:[/] [yellow]{config.Model}[/]\n" +
+                         "[dim]Type [cyan]/help[/] for commands[/]";
+
+        var panel = new Panel(new Markup(bannerText))
         {
             Border = BoxBorder.Rounded,
             BorderStyle = new Style(foreground: Color.Cyan),
@@ -101,11 +122,7 @@ public sealed class WingmanRepl
         {
             var currentDir = new DirectoryInfo(path);
             var parentName = currentDir.Parent?.Name;
-            
-            if (parentName != null)
-                return $"{parentName}/{currentDir.Name}";
-            
-            return currentDir.Name;
+            return parentName != null ? $"{parentName}/{currentDir.Name}" : currentDir.Name;
         }
         catch
         {

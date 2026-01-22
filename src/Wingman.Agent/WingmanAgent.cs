@@ -46,7 +46,7 @@ public class WingmanAgent
         return response.AsChatResponse();
     }
 
-    public async Task RunStreamingWithToolsAsync(string prompt, string? workingDirectory = null, Action<string>? onTextUpdate = null)
+    public async Task RunStreamingWithToolsAsync(string prompt, string? workingDirectory = null, Action<string, bool>? onTextUpdate = null)
     {
         var basePrompt = $@"{this.systemPrompt}
         {(workingDirectory != null ? $"Current working directory: {workingDirectory}" : "")}
@@ -64,7 +64,7 @@ public class WingmanAgent
         await foreach (var update in agent.RunStreamingAsync(prompt))
         {
             var text = update.Text;
-            onTextUpdate?.Invoke(text);
+            onTextUpdate?.Invoke(text, update.Contents.Any(c => c.GetType().Name.Contains("Thinking", StringComparison.OrdinalIgnoreCase)));
         }
     }
 }

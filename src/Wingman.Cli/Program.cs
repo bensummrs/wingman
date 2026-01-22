@@ -2,6 +2,8 @@ using Spectre.Console;
 using Wingman.Agent.Configuration;
 using Wingman.Cli;
 
+Console.BackgroundColor = ConsoleColor.Black;
+Console.Clear();
 
 var load = WingmanCliConfigLoader.TryLoad();
 if (!string.IsNullOrEmpty(load.ErrorMessage))
