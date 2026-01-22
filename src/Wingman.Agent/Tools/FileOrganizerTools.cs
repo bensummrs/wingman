@@ -330,10 +330,7 @@ public static class FileOrganizerTools
             .ThenBy(x => x.destinationFolder, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var plan = new OrganizationPlan(
-            DirectoryPath: directoryPath,
-            Strategy: "by_extension",
-            Moves: moves.ToArray());
+        var plan = new OrganizationPlan(directoryPath, "by_extension", moves.ToArray());
 
         return JsonSerializer.Serialize(new
         {
@@ -396,18 +393,9 @@ public static class FileOrganizerTools
 
     private static OrganizationPlan? TryDeserializeWrappedPlan(string json)
     {
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.ValueKind == JsonValueKind.Object &&
-                doc.RootElement.TryGetProperty("plan", out var planEl))
-            {
-                return planEl.Deserialize<OrganizationPlan>();
-            }
-        }
-        catch
-        {
-        }
+        using var doc = JsonDocument.Parse(json);
+        if (doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("plan", out var planEl))
+            return planEl.Deserialize<OrganizationPlan>();
 
         return null;
     }
@@ -435,35 +423,20 @@ public static class FileOrganizerTools
             searchRoots.Add(Environment.GetFolderPath(Environment.SpecialFolder.Desktop));
             searchRoots.Add(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
 
-            try
-            {
-                searchRoots.AddRange(DriveInfo.GetDrives()
-                    .Where(d => d.IsReady && d.DriveType == DriveType.Fixed)
-                    .Select(d => d.RootDirectory.FullName));
-            }
-            catch
-            {
-            }
+            searchRoots.AddRange(DriveInfo.GetDrives()
+                .Where(d => d.IsReady && d.DriveType == DriveType.Fixed)
+                .Select(d => d.RootDirectory.FullName));
         }
 
         foreach (var root in searchRoots.Distinct())
         {
             if (!Directory.Exists(root)) continue;
 
-            try
-            {
-                SearchDirectoryRecursive(root, searchTerms, matches, maxResults, maxDepth: 5, currentDepth: 0);
-                if (matches.Count >= maxResults) break;
-            }
-            catch
-            {
-            }
+            SearchDirectoryRecursive(root, searchTerms, matches, maxResults, maxDepth: 5, currentDepth: 0);
+            if (matches.Count >= maxResults) break;
         }
 
-        return matches
-            .OrderByDescending(m => m.Score)
-            .Take(maxResults)
-            .ToList();
+        return matches.OrderByDescending(m => m.Score).Take(maxResults).ToList();
     }
 
     private static void SearchDirectoryRecursive(
@@ -477,60 +450,42 @@ public static class FileOrganizerTools
         if (matches.Count >= maxResults || currentDepth > maxDepth)
             return;
 
-        try
+        var dirInfo = new DirectoryInfo(currentPath);
+        var dirName = dirInfo.Name.ToLowerInvariant();
+
+        var score = 0;
+        var matchReasons = new List<string>();
+
+        foreach (var term in searchTerms)
         {
-            var dirInfo = new DirectoryInfo(currentPath);
-            var dirName = dirInfo.Name.ToLowerInvariant();
-
-            var score = 0;
-            var matchReasons = new List<string>();
-
-            foreach (var term in searchTerms)
+            if (dirName.Equals(term, StringComparison.OrdinalIgnoreCase))
             {
-                if (dirName.Equals(term, StringComparison.OrdinalIgnoreCase))
-                {
-                    score += 100;
-                    matchReasons.Add($"Exact match: '{term}'");
-                }
-                else if (dirName.Contains(term))
-                {
-                    score += 50;
-                    matchReasons.Add($"Contains: '{term}'");
-                }
-                else if (dirName.StartsWith(term, StringComparison.OrdinalIgnoreCase))
-                {
-                    score += 75;
-                    matchReasons.Add($"Starts with: '{term}'");
-                }
+                score += 100;
+                matchReasons.Add($"Exact match: '{term}'");
             }
-
-            score -= currentDepth * 5;
-
-            if (score > 0)
+            else if (dirName.Contains(term))
             {
-                matches.Add(new DirectoryMatch(
-                    Path: currentPath,
-                    Score: score,
-                    Reason: string.Join(", ", matchReasons)
-                ));
+                score += 50;
+                matchReasons.Add($"Contains: '{term}'");
             }
-
-            if (currentDepth < maxDepth)
+            else if (dirName.StartsWith(term, StringComparison.OrdinalIgnoreCase))
             {
-                foreach (var subDir in Directory.EnumerateDirectories(currentPath))
-                {
-                    try
-                    {
-                        SearchDirectoryRecursive(subDir, searchTerms, matches, maxResults, maxDepth, currentDepth + 1);
-                    }
-                    catch
-                    {
-                    }
-                }
+                score += 75;
+                matchReasons.Add($"Starts with: '{term}'");
             }
         }
-        catch
+
+        score -= currentDepth * 5;
+
+        if (score > 0)
+            matches.Add(new DirectoryMatch(currentPath, score, string.Join(", ", matchReasons)));
+
+        if (currentDepth < maxDepth)
         {
+            foreach (var subDir in Directory.EnumerateDirectories(currentPath))
+            {
+                SearchDirectoryRecursive(subDir, searchTerms, matches, maxResults, maxDepth, currentDepth + 1);
+            }
         }
     }
 
