@@ -1,26 +1,29 @@
-# Wingman - AI File Organization Agent
+# Wingman - AI File Organization Assistant
 
-A Windows ARM-compatible AI agent built with Microsoft Semantic Kernel and Claude AI for intelligent file organization via PowerShell.
+An interactive AI assistant for intelligent file organization, powered by Claude AI and Microsoft.Extensions.AI.
+
+![Wingman Screenshot](assets/image.png)
 
 ## Features
 
-- 🤖 **AI-Powered**: Uses Claude 3.5 Sonnet for intelligent file categorization
-- 📁 **File Organization**: Automatically organize files by type, date, or custom rules
-- 💻 **PowerShell Integration**: Easy-to-use cmdlets for Windows automation
-- 🔧 **ARM64 Compatible**: Built for Windows ARM devices
-- 🛡️ **Safe Operations**: Preview changes before applying, with undo capability
+- 🤖 **AI-Powered**: Uses Claude 3.5 Sonnet for intelligent file operations
+- 💬 **Interactive REPL**: Chat-based interface with conversation history
+- 📁 **File Organization**: List, search, move, copy, and organize files with natural language
+- 🔍 **Smart Path Resolution**: Supports absolute paths, relative paths, and natural language directory descriptions
+- 🛡️ **Safe Operations**: Preview organization plans before applying, requires explicit approval for destructive operations
+- 🎯 **Context-Aware**: Maintains working directory and conversation context
 
 ## Prerequisites
 
 - .NET 9.0 SDK or later
-- Windows 10/11 (ARM64 or x64)
+- Windows, macOS, or Linux
 - Anthropic API key ([get one here](https://console.anthropic.com/))
 
 ## Quick Start
 
 ### 1. Clone and Build
 
-```powershell
+```bash
 git clone <your-repo-url>
 cd wingman
 dotnet build
@@ -30,7 +33,9 @@ dotnet build
 
 **Option 1: Config File (Recommended)**
 
-Copy `wingman.config.json.example` to `wingman.config.json` and add your API key:
+Create `wingman.config.json` in either:
+- The current directory, OR
+- Your home directory (`~\wingman.config.json` or `$HOME/wingman.config.json`)
 
 ```json
 {
@@ -40,68 +45,99 @@ Copy `wingman.config.json.example` to `wingman.config.json` and add your API key
 }
 ```
 
-Place this file in:
-- The project directory, OR
-- Your home directory (`C:\Users\YourName\wingman.config.json`)
-
 **Option 2: Environment Variable**
 
-```powershell
-$env:ANTHROPIC_API_KEY = "your_actual_api_key_here"
+```bash
+export ANTHROPIC_API_KEY="your_api_key_here"
 ```
 
-(Note: Environment variables only work for the current session unless set permanently)
+### 3. Run Wingman
 
-### 3. Import PowerShell Module
-
-```powershell
-Import-Module .\src\Wingman.PowerShell\bin\Debug\net9.0\Wingman.PowerShell.dll
+```bash
+dotnet run --project src/Wingman.Cli
 ```
 
 ### 4. Use Wingman
 
-```powershell
-# Organize your Downloads folder
-Invoke-Wingman -Prompt "Organize my files by type" -Directory "C:\Users\YourName\Downloads"
+Once in the REPL, you can chat with Wingman using natural language:
 
-# Start an interactive session
-$session = Start-WingmanSession
-Invoke-Wingman -Session $session -Prompt "What files are in my Documents folder?"
 ```
+wingman ❯ list my downloads folder
+wingman ❯ organize files in Documents by extension
+wingman ❯ find all PDF files larger than 5MB
+wingman ❯ move report.pdf to my Documents folder
+```
+
+## REPL Commands
+
+| Command | Description |
+|---------|-------------|
+| `/help` | Show available commands |
+| `/exit` or `/quit` | Exit the REPL |
+| `/cwd` | Show current working directory |
+| `/cd <path>` | Change working directory |
+| `/reset` | Clear conversation history |
+| `/clear` | Clear screen |
+| `/model <name>` | Switch AI model |
+
+## Available Tools
+
+Wingman has access to the following file operations:
+
+- **ResolvePath**: Quickly resolve file/directory paths (absolute, relative, or by name)
+- **FindDirectory**: Search for directories using natural language descriptions
+- **ListDirectory**: List files and subdirectories with metadata
+- **SearchFiles**: Find files by name pattern, extension, or size
+- **MoveItem**: Move files or directories to new locations
+- **CopyFile**: Copy files to other locations
+- **DeleteItem**: Delete files or directories (requires approval)
+- **CreateDirectory**: Create new directories (requires approval)
+- **PreviewOrganizeByExtension**: Preview file organization by extension
+- **ApplyOrganizationPlan**: Apply an organization plan (requires approval)
+
+All destructive operations require the approval phrase `I_APPROVE_FILE_CHANGES`.
 
 ## Project Structure
 
 ```
 wingman/
 ├── src/
-│   ├── Wingman.Agent/          # Core agent logic with Semantic Kernel
-│   ├── Wingman.PowerShell/     # PowerShell cmdlets
+│   ├── Wingman.Agent/          # Core agent with AI tools and configuration
+│   │   ├── Tools/              # File organization tools
+│   │   └── Configuration/      # Configuration models
+│   ├── Wingman.Cli/            # Interactive REPL CLI
 │   └── Wingman.Tests/          # Unit tests
-├── examples/                    # Example scripts
-├── .env.example                # Example configuration
 └── README.md                   # This file
 ```
 
 ## Use Cases
 
-- **Organize Downloads**: Sort files by type (images, documents, videos)
-- **Clean Desktop**: Move files to appropriate folders
-- **Date-based Organization**: Organize photos by year/month
-- **Duplicate Detection**: Find and manage duplicate files
-- **Custom Rules**: Create your own organization logic with AI
+- **Organize Downloads**: "Organize my downloads folder by file type"
+- **Find Files**: "Find all images larger than 10MB in my Pictures folder"
+- **Clean Up**: "List all files in Desktop that are older than 6 months"
+- **Move Files**: "Move all PDFs from Downloads to Documents/Reports"
+- **Preview Changes**: "Preview organizing my Documents by extension"
 
 ## Development
 
-```powershell
+```bash
 # Build all projects
 dotnet build
 
 # Run tests
 dotnet test
 
-# Build PowerShell module
-dotnet build src/Wingman.PowerShell/Wingman.PowerShell.csproj
+# Run the CLI
+dotnet run --project src/Wingman.Cli
 ```
+
+## Architecture
+
+Wingman uses:
+- **Microsoft.Extensions.AI**: For unified AI client abstraction
+- **Anthropic SDK**: To access Claude AI models
+- **Microsoft.Agents.AI**: For AI agent orchestration with tool calling
+- **Spectre.Console**: For rich terminal UI
 
 ## License
 
