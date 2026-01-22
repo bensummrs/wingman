@@ -74,14 +74,7 @@ public static class FileOrganizerTools
         foreach (var filePath in Directory.EnumerateFiles(resolvedPath))
         {
             var info = new FileInfo(filePath);
-            items.Add(new FileSystemItem(
-                Type: "file",
-                Name: info.Name,
-                FullPath: info.FullName,
-                Extension: info.Extension,
-                SizeBytes: info.Length,
-                LastWriteTimeUtc: info.LastWriteTimeUtc
-            ));
+            items.Add(new FileSystemItem("file", info.Name, info.FullName, info.Extension, info.Length, info.LastWriteTimeUtc));
         }
 
         if (includeSubdirectories)
@@ -89,14 +82,7 @@ public static class FileOrganizerTools
             foreach (var dirPath in Directory.EnumerateDirectories(resolvedPath))
             {
                 var info = new DirectoryInfo(dirPath);
-                items.Add(new FileSystemItem(
-                    Type: "directory",
-                    Name: info.Name,
-                    FullPath: info.FullName,
-                    Extension: null,
-                    SizeBytes: null,
-                    LastWriteTimeUtc: info.LastWriteTimeUtc
-                ));
+                items.Add(new FileSystemItem("directory", info.Name, info.FullName, null, null, info.LastWriteTimeUtc));
             }
         }
 
@@ -177,18 +163,10 @@ public static class FileOrganizerTools
         var searchOption = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
         var pattern = fileNamePattern ?? "*";
 
-        var files = Directory.EnumerateFiles(directoryPath, pattern, searchOption)
-            .Select(p => new FileInfo(p))
-            .Where(f =>
-            {
-                if (extension != null && !f.Extension.Equals(extension, StringComparison.OrdinalIgnoreCase))
-                    return false;
-                if (minSizeBytes.HasValue && f.Length < minSizeBytes.Value)
-                    return false;
-                if (maxSizeBytes.HasValue && f.Length > maxSizeBytes.Value)
-                    return false;
-                return true;
-            })
+        var fileInfos = Directory.EnumerateFiles(directoryPath, pattern, searchOption).Select(p => new FileInfo(p));
+        var filteredFiles = fileInfos.FilterByExtensionAndSize(extension, minSizeBytes, maxSizeBytes);
+
+        var files = filteredFiles
             .Take(maxResults)
             .Select(f => new
             {
