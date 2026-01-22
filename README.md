@@ -1,4 +1,4 @@
-# Wingman - AI File Organization Assistant
+# Wingman - AI Coworking Assistant (Inspired by Claude Cowork)
 
 An interactive AI assistant for intelligent file organization, powered by Claude AI and Microsoft.Extensions.AI.
 
