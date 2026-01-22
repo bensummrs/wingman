@@ -1,3 +1,4 @@
+using Anthropic;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using OpenAI;
@@ -21,9 +22,9 @@ public class WingmanAgent
         this.config.Validate();
     }
 
-    private async Task<AIAgent> CreateAgent(string prompt, List<AITool> tools)
+    private async Task<AIAgent> CreateAnthropicAgent(string prompt, List<AITool> tools)
     {
-        var chatClient = new OpenAIClient(config.ApiKey!).GetChatClient(config.Model);
+        var chatClient = new AnthropicClient(new Anthropic.Core.ClientOptions { APIKey = config.ApiKey }).AsIChatClient(config.Model);
         return chatClient.AsAIAgent(prompt, tools: tools);
     }
 
@@ -40,7 +41,7 @@ public class WingmanAgent
 
         Be helpful, safe, and always confirm before moving or modifying files.";
 
-        var agent = await CreateAgent(basePrompt, ToolsFactory.CreateDefaultTools().ToList());
+        var agent = await CreateAnthropicAgent(basePrompt, ToolsFactory.CreateDefaultTools().ToList());
         var response = await agent.RunAsync(prompt);
         return response.AsChatResponse();
     }
