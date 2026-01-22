@@ -16,7 +16,7 @@ An interactive AI assistant for intelligent file organization, powered by Claude
 ## Prerequisites
 
 - .NET 9.0 SDK or later
-- Windows, macOS, or Linux
+- Windows or Linux (macOS is not supported)
 - Anthropic API key ([get one here](https://console.anthropic.com/))
 
 ## Quick Start

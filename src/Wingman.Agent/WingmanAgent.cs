@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Anthropic;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -19,6 +20,9 @@ public class WingmanAgent
 
     public WingmanAgent(WingmanConfig config)
     {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            Environment.Exit(1);
+        
         this.config = config ?? throw new ArgumentNullException(nameof(config));
         this.config.Validate();
     }

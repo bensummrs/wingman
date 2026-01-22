@@ -15,4 +15,9 @@
     <PackageReference Include="Spectre.Console" Version="0.54.0" />
   </ItemGroup>
 
+  <Target Name="PreventMacOSBuild" BeforeTargets="Build">
+    <Error Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::OSX)))' == 'true'" 
+           Text="This project does not support macOS. Please use Windows or Linux." />
+  </Target>
+
 </Project>
