@@ -39,7 +39,7 @@ public static class ReplCommands
         CommandParseResult parsed,
         WingmanConfig config,
         ConversationHistory history,
-        ref WingmanAgent agent,
+        ref WingmanOrchestrator agent,
         ref string workingDirectory)
     {
         switch (parsed.Command)
@@ -94,7 +94,7 @@ public static class ReplCommands
                 }
 
                 config.Model = parsed.Argument;
-                agent = new WingmanAgent(config);
+                agent = new WingmanOrchestrator(config);
                 history.Clear();
                 AnsiConsole.MarkupLine($"[green]✓[/] Model set to: [yellow]{config.Model}[/]");
                 AnsiConsole.MarkupLine("[dim]Conversation history cleared[/]");

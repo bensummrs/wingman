@@ -27,15 +27,11 @@ public abstract class BaseWingmanAgent : IWingmanAgent
     /// <inheritdoc />
     public abstract string Description { get; }
 
-    /// <summary>
-    /// Gets the system prompt for this specialized agent.
-    /// </summary>
-    protected abstract string SystemPrompt { get; }
+    /// <inheritdoc />
+    public abstract string Instructions { get; }
 
-    /// <summary>
-    /// Gets the tools available to this agent.
-    /// </summary>
-    protected abstract IReadOnlyList<AITool> GetTools();
+    /// <inheritdoc />
+    public abstract IReadOnlyList<AITool> Tools { get; }
 
     /// <summary>
     /// Gets additional context to append to the system prompt based on the working directory.
@@ -52,8 +48,8 @@ public abstract class BaseWingmanAgent : IWingmanAgent
     {
         PathExtensions.CurrentWorkingDirectory = workingDirectory;
 
-        var fullPrompt = SystemPrompt + GetContextualPrompt(workingDirectory);
-        var agent = CreateAgent(fullPrompt, GetTools().ToList());
+        var fullPrompt = Instructions + GetContextualPrompt(workingDirectory);
+        var agent = CreateAgent(fullPrompt, Tools.ToList());
 
         await foreach (var update in agent.RunStreamingAsync(prompt))
         {

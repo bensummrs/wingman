@@ -11,14 +11,14 @@ public sealed class WingmanRepl
 {
     private readonly WingmanConfig config;
     private readonly ConversationHistory history = new();
-    private WingmanAgent agent;
+    private WingmanOrchestrator orchestrator;
     private string workingDirectory;
 
     public WingmanRepl(WingmanConfig config, string initialWorkingDirectory)
     {
         this.config = config ?? throw new ArgumentNullException(nameof(config));
         workingDirectory = initialWorkingDirectory ?? throw new ArgumentNullException(nameof(initialWorkingDirectory));
-        agent = new WingmanAgent(this.config);
+        orchestrator = new WingmanOrchestrator(this.config);
     }
 
     public async Task<int> RunAsync()
@@ -53,7 +53,7 @@ public sealed class WingmanRepl
     private bool HandleCommand(string input)
     {
         var parsed = ReplCommands.Parse(input);
-        var handled = ReplCommands.TryHandle(parsed, config, history, ref agent, ref workingDirectory);
+        var handled = ReplCommands.TryHandle(parsed, config, history, ref orchestrator, ref workingDirectory);
         
         if (handled.ShouldExit)
             AnsiConsole.MarkupLine("[dim]Goodbye! 👋[/]");
@@ -70,7 +70,7 @@ public sealed class WingmanRepl
             AnsiConsole.WriteLine();
             var fullResponse = new StringBuilder();
 
-            await agent.RunStreamingWithToolsAsync(composedPrompt, workingDirectory, onTextUpdate: (text, isThinking) =>
+            await orchestrator.RunStreamingAsync(composedPrompt, workingDirectory, onTextUpdate: (text, isThinking) =>
             {
                 var color = isThinking ? Color.Grey : Color.White;
                 AnsiConsole.Write(new Text(text, new Style(foreground: color)));

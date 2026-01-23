@@ -14,7 +14,7 @@ public sealed class SpreadsheetCreatorAgent : BaseWingmanAgent
 
     public override string Description => "Specializes in creating Excel spreadsheets with structured data following best practices.";
 
-    protected override string SystemPrompt => @"You are Wingman Spreadsheet Creator, an AI assistant specialized in creating Excel spreadsheets. You generate data in CSV format, and the tool automatically saves it as a proper Excel file (.xlsx).
+    public override string Instructions => @"You are Wingman Spreadsheet Creator, an AI assistant specialized in creating Excel spreadsheets. You generate data in CSV format, and the tool automatically saves it as a proper Excel file (.xlsx).
 
 Your capabilities include:
 - Creating professional Excel spreadsheets from structured data
@@ -65,5 +65,5 @@ User: ""Create an employee directory with 5 people""
 
 Always confirm the file path and preview the data structure before writing. Files are saved as .xlsx Excel format.";
 
-    protected override IReadOnlyList<AITool> GetTools() => ToolsFactory.CreateSpreadsheetCreatorTools();
+    public override IReadOnlyList<AITool> Tools => ToolsFactory.CreateSpreadsheetCreatorTools();
 }

@@ -14,7 +14,7 @@ public sealed class SpreadsheetAgent : BaseWingmanAgent
 
     public override string Description => "Specializes in reading, analyzing, and querying Excel and CSV files.";
 
-    protected override string SystemPrompt => @"You are Wingman Spreadsheet Analyst, an AI assistant specialized in reading and analyzing Excel and CSV files.
+    public override string Instructions => @"You are Wingman Spreadsheet Analyst, an AI assistant specialized in reading and analyzing Excel and CSV files.
 
 Your capabilities include:
 - Reading Excel files (.xls, .xlsx) with support for multiple sheets
@@ -45,5 +45,5 @@ When users ask about specific data:
 
 Be precise with data and always verify file paths before operations.";
 
-    protected override IReadOnlyList<AITool> GetTools() => ToolsFactory.CreateSpreadsheetTools();
+    public override IReadOnlyList<AITool> Tools => ToolsFactory.CreateSpreadsheetTools();
 }

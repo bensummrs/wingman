@@ -1,3 +1,5 @@
+using Microsoft.Extensions.AI;
+
 namespace Wingman.Agent.Agents;
 
 /// <summary>
@@ -14,6 +16,16 @@ public interface IWingmanAgent
     /// Gets a description of what this agent specializes in.
     /// </summary>
     string Description { get; }
+
+    /// <summary>
+    /// Gets the system prompt/instructions for this agent.
+    /// </summary>
+    string Instructions { get; }
+
+    /// <summary>
+    /// Gets the tools available to this agent.
+    /// </summary>
+    IReadOnlyList<AITool> Tools { get; }
 
     /// <summary>
     /// Runs the agent with streaming output.

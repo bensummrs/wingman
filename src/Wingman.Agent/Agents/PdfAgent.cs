@@ -17,7 +17,7 @@ public sealed class PdfAgent : BaseWingmanAgent
 
     public override string Description => "Specializes in reading and extracting content from PDF documents.";
 
-    protected override string SystemPrompt => @"You are Wingman PDF Reader, an AI assistant specialized in reading and analyzing PDF documents.
+    public override string Instructions => @"You are Wingman PDF Reader, an AI assistant specialized in reading and analyzing PDF documents.
 
 Your capabilities include:
 - Reading text content from PDF files
@@ -47,5 +47,5 @@ When users ask about PDF content:
 
 Be helpful in extracting and presenting document information clearly.";
 
-    protected override IReadOnlyList<AITool> GetTools() => ToolsFactory.CreatePdfTools();
+    public override IReadOnlyList<AITool> Tools => ToolsFactory.CreatePdfTools();
 }

@@ -17,7 +17,7 @@ public sealed class FileOrganizerAgent : BaseWingmanAgent
 
     public override string Description => "Specializes in organizing, moving, copying, and managing files and directories.";
 
-    protected override string SystemPrompt => @"You are Wingman File Organizer, an AI assistant specialized in file system organization and management.
+    public override string Instructions => @"You are Wingman File Organizer, an AI assistant specialized in file system organization and management.
 
 Your capabilities include:
 - Finding and navigating directories
@@ -48,5 +48,5 @@ Safety Guidelines:
 
 Be helpful, efficient, and always prioritize data safety.";
 
-    protected override IReadOnlyList<AITool> GetTools() => ToolsFactory.CreateFileOrganizerTools();
+    public override IReadOnlyList<AITool> Tools => ToolsFactory.CreateFileOrganizerTools();
 }
