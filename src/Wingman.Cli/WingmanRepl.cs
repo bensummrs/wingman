@@ -11,6 +11,7 @@ public sealed class WingmanRepl
 {
     private readonly WingmanConfig config;
     private readonly ConversationHistory history = new();
+    private WingmanAgent agent;
     private WingmanOrchestrator orchestrator;
     private string workingDirectory;
 
@@ -18,7 +19,7 @@ public sealed class WingmanRepl
     {
         this.config = config ?? throw new ArgumentNullException(nameof(config));
         workingDirectory = initialWorkingDirectory ?? throw new ArgumentNullException(nameof(initialWorkingDirectory));
-        orchestrator = new WingmanOrchestrator(this.config);
+        agent = new WingmanAgent(this.config);
     }
 
     public async Task<int> RunAsync()
@@ -70,7 +71,7 @@ public sealed class WingmanRepl
             AnsiConsole.WriteLine();
             var fullResponse = new StringBuilder();
 
-            await orchestrator.RunStreamingAsync(composedPrompt, workingDirectory, onTextUpdate: (text, isThinking) =>
+            await agent.RunStreamingWithToolsAsync(composedPrompt, workingDirectory, onTextUpdate: (text, isThinking) =>
             {
                 var color = isThinking ? Color.Grey : Color.White;
                 AnsiConsole.Write(new Text(text, new Style(foreground: color)));
@@ -103,18 +104,24 @@ public sealed class WingmanRepl
 
     private void ShowWelcomeBanner()
     {
-        var bannerText = $"[bold cyan]Wingman AI Assistant[/]\n" +
-                         $"[dim]Model:[/] [yellow]{config.Model}[/]\n" +
-                         "[dim]Type [cyan]/help[/] for commands[/]";
-
-        var panel = new Panel(new Markup(bannerText))
+        var bannerLines = new[]
         {
-            Border = BoxBorder.Rounded,
-            BorderStyle = new Style(foreground: Color.Cyan),
-            Padding = new Padding(1, 0)
+            "██╗    ██╗██╗███╗   ██╗ ██████╗ ███╗   ███╗ █████╗ ███╗   ██╗",
+            "██║    ██║██║████╗  ██║██╔════╝ ████╗ ████║██╔══██╗████╗  ██║",
+            "██║ █╗ ██║██║██╔██╗ ██║██║  ███╗██╔████╔██║███████║██╔██╗ ██║",
+            "██║███╗██║██║██║╚██╗██║██║   ██║██║╚██╔╝██║██╔══██║██║╚██╗██║",
+            "╚███╔███╔╝██║██║ ╚████║╚██████╔╝██║ ╚═╝ ██║██║  ██║██║ ╚████║",
+            " ╚══╝╚══╝ ╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝"
         };
 
-        AnsiConsole.Write(panel);
+        AnsiConsole.WriteLine();
+        foreach (var line in bannerLines)
+        {
+            AnsiConsole.MarkupLine($"[#00CED1]{line}[/]");
+        }
+        AnsiConsole.WriteLine();
+        
+        AnsiConsole.MarkupLine($"  [dim]Model:[/] [yellow]{config.Model}[/]  [dim]•[/]  [dim]Type[/] [cyan]/help[/] [dim]for commands[/]");
         AnsiConsole.WriteLine();
     }
 
