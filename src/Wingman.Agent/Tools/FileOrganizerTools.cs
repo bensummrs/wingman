@@ -296,6 +296,62 @@ public static class FileOrganizerTools
         });
     }
 
+    [Description("""
+        Writes text content to a file. Creates the file if it doesn't exist, or overwrites if it does.
+        Use this to create any text-based file: CSV, TXT, JSON, HTML, Markdown, etc.
+        For CSV files, format the content with comma-separated values and newlines between rows.
+        Example CSV: "Name,Age,City\nAlice,30,NYC\nBob,25,LA"
+        """)]
+    public static string WriteFile(
+        [Description("The full path where the file should be written (e.g., 'C:/Documents/report.csv').")] string filePath,
+        [Description("The text content to write to the file.")] string content,
+        [Description("Must exactly equal 'I_APPROVE_FILE_CHANGES' to perform the write.")] string approvalPhrase = "")
+    {
+        if (!string.Equals(approvalPhrase, ApprovalPhrase, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Refusing to modify files. approvalPhrase must be exactly '{ApprovalPhrase}'.");
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        ArgumentNullException.ThrowIfNull(content);
+
+        var resolvedPath = filePath.ResolvePathWithFileName();
+
+        var directory = Path.GetDirectoryName(resolvedPath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+            Directory.CreateDirectory(directory);
+
+        bool existed = File.Exists(resolvedPath);
+        File.WriteAllText(resolvedPath, content);
+
+        return JsonSerializer.Serialize(new
+        {
+            filePath = resolvedPath,
+            created = !existed,
+            overwritten = existed,
+            bytes = new FileInfo(resolvedPath).Length,
+        });
+    }
+
+    [Description("Reads the text content of a file and returns it.")]
+    public static string ReadFile(
+        [Description("The path to the file to read.")] string filePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+
+        var resolvedPath = filePath.ResolvePathWithFileName();
+
+        if (!File.Exists(resolvedPath))
+            throw new FileNotFoundException($"File not found: {resolvedPath}");
+
+        var content = File.ReadAllText(resolvedPath);
+
+        return JsonSerializer.Serialize(new
+        {
+            filePath = resolvedPath,
+            content,
+            bytes = new FileInfo(resolvedPath).Length,
+        });
+    }
+
     [Description("Creates a preview plan to organize files in a directory by extension. Does not modify the file system. Supports natural language directory descriptions.")]
     public static string PreviewOrganizeByExtension(
         [Description("Path or description of the directory to organize (e.g., 'downloads folder', 'C:\\Users\\username\\Documents').")] string directoryPathOrDescription,
